@@ -1,0 +1,17 @@
+name: raylib_pong
+version: 0.1.0
+
+authors:
+  - your-name-here <your-email-here>
+
+targets:
+  raylib_pong:
+    main: src/raylib_pong.cr
+
+crystal: 1.9.2
+
+license: MIT
+
+dependencies:
+  raylib-cr:
+    github: sol-vin/raylib-cr
