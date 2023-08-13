@@ -1,14 +1,8 @@
-name: Deploy docs
-on: 
-  push:
-    branches: 
-      - main
-  pull_request:
-    branches: 
-      - main
+name: Build
+on: [push, pull_request]
 jobs:
   build:
-    name: Deploy docs
+    name: Build
     runs-on: ubuntu-latest
     steps:
       - name: Download source
@@ -41,12 +35,5 @@ jobs:
         run: sudo cp /usr/local/lib/libraylib.so.4.5.0 /usr/lib/libraylib.so.450
       - name: Install raylib 2
         run: sudo ln -s /usr/lib/libraylib.so.450 /lib/raylib.so
-      - name: Build site
-        run: crystal docs
-      - name: Deploy docs
-        uses: crazy-max/ghaction-github-pages@v1.2.5
-        with:
-          target_branch: gh-pages
-          build_dir: docs
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build project
+        run: shards build
