@@ -1,128 +1,206 @@
 require "raylib-cr"
-screen_width = 2048
-screen_height = 1024
 
-# Speed of the ball
-ball_speed = 6_f32/4
+module RaylibPong
+  VERSION = "0.1alpha"
 
-# Speed of the left paddle
-paddle1_speed = 5.4_f32/4
+  class Paddle
+    enum Player
+      One
+      Two
+    end
 
-# Speed of the right paddle
-paddle2_speed = 5.4_f32/4
+    enum Direction
+      Up   = -1
+      Down =  1
+    end
 
-Raylib.init_window(screen_width, screen_height, "Pong")
+    SPEED  =  0.75
+    WIDTH  = 0.01
+    HEIGHT =  0.1
+    MARGIN =  0.1
 
-class Paddle
-  property paddle
-  property score : Int32
-  getter paddle_speed : Float32
-  getter paddle_num : Int32
+    property position = Raylib::Vector2.new
 
-  def initialize(@paddle_speed, @paddle_num)
-    @score = 0
-    @paddle = Raylib::Rectangle.new
-    @paddle.width = 10
-    @paddle.height = 140
-    @paddle.x = @paddle_num == 1 ? 60 : Raylib.get_screen_width - 60
-    @paddle.y = Raylib.get_screen_height/2 - @paddle.height/2
+    getter owner : Player
+
+    def initialize(@owner)
+      @position.x = @owner == Player::One ? MARGIN : 1.0 - MARGIN
+      @position.y = 0.5 - HEIGHT/2
+    end
+
+    def bounds
+      Raylib::Rectangle.new(
+        x: @position.x,
+        y: @position.y,
+        width: WIDTH,
+        height: HEIGHT
+      )
+    end
+
+    def texture
+      Raylib::Rectangle.new(
+        x: @position.x * Raylib.get_screen_width,
+        y: @position.y * Raylib.get_screen_height,
+        width: WIDTH * Raylib.get_screen_width,
+        height: HEIGHT * Raylib.get_screen_height
+      )
+    end
+
+    def move(d : Direction)
+      if (@position.y >= 0) || (@position.y <= 1.0 - HEIGHT)
+        @position.y += SPEED * d.value * Raylib.get_frame_time
+      end
+    end
+
+    def update
+      if @owner == Player::One
+        move Direction::Up if Raylib.key_down?(Raylib::KeyboardKey::W)
+        move Direction::Down if Raylib.key_down?(Raylib::KeyboardKey::S)
+      else
+        move Direction::Up if Raylib.key_down?(Raylib::KeyboardKey::Up)
+        move Direction::Down if Raylib.key_down?(Raylib::KeyboardKey::Down)
+      end
+
+      wall_hit_check
+    end
+
+    def wall_hit_check
+      if @position.y < 0
+        @position.y = 0
+      elsif @position.y + HEIGHT > 1.0
+        @position.y = 1.0 - HEIGHT
+      end
+    end
+
+    def draw
+      Raylib.draw_rectangle_rec(texture, Raylib::GREEN)
+    end
   end
 
-  def move(direction : Int32)
-    if @paddle.y >= 0 && direction == -1 || @paddle.y <= Raylib.get_screen_height - @paddle.height && direction == 1
-      @paddle.y += @paddle_speed * direction
+  module Ball
+    RADIUS = 0.005
+    SPEED  =  0.2
+    SPEED_INCREASE = 0.1
+
+    class_property position : Raylib::Vector2 = Raylib::Vector2.new(x: 0.5, y: 0.5)
+    class_property velocity : Raylib::Vector2 = Raylib::Vector2.new(x: -SPEED, y: 0)
+    class_getter speed_increase = 1.0
+
+    def self.reset
+      @@position = Raylib::Vector2.new(x: 0.5, y: 0.5)
+      @@speed_increase = 1.0
     end
+
+    def self.update
+      @@position = @@position + (@@velocity * Raylib.get_frame_time) * @@speed_increase
+      wall_hit_check
+    end
+
+    def self.wall_hit_check
+      if @@position.y < 0
+        @@position.y = 0
+        @@velocity.y *= -1
+      elsif @@position.y > 1.0
+        @@position.y = 1.0
+        @@velocity.y *= -1
+      end
+    end
+
+    def self.increase_speed
+      @@speed_increase += SPEED_INCREASE
+    end
+
+    def self.draw
+      abs_position = @@position * Raylib::Vector2.new(x: Raylib.get_screen_width, y: Raylib.get_screen_height)
+      Raylib.draw_circle(abs_position.x, abs_position.y, Ball::RADIUS * Raylib.get_screen_width, Raylib::GREEN)
+    end
+  end
+
+  class_getter pause = false
+  class_getter paddle1 = Paddle.new Paddle::Player::One
+  class_getter paddle2 = Paddle.new Paddle::Player::Two
+
+  class_getter player1_score = 0
+  class_getter player2_score = 0
+
+  def self.ball_hit_paddle?(paddle)
+    ((Ball.velocity.x < 0 && paddle.owner == Paddle::Player::One) ||
+    (Ball.velocity.x > 0 && paddle.owner == Paddle::Player::Two)) &&
+    Raylib.check_collision_point_rec?(
+      Ball.position,
+      paddle.bounds
+    )
+  end
+
+  def self.update_collision
+    if ball_hit_paddle?(paddle1)
+      paddle_point = Raylib::Vector2.new(
+        x: (paddle1.position.x + Paddle::WIDTH/2),
+        y: (paddle1.position.y + Paddle::HEIGHT/2)
+      )
+      Ball.increase_speed
+
+      Ball.velocity = (Ball.position - paddle_point).normalize * Ball::SPEED
+    elsif ball_hit_paddle?(paddle2)
+      paddle_point = Raylib::Vector2.new(
+        x: (paddle2.position.x + Paddle::WIDTH/2),
+        y: (paddle2.position.y + Paddle::HEIGHT/2)
+      )
+      Ball.increase_speed
+
+      Ball.velocity = (Ball.position - paddle_point).normalize * Ball::SPEED
+    end
+
+    if Ball.position.x < 0
+      @@player2_score += 1
+      Ball.reset
+    elsif Ball.position.x > 1.0
+      @@player1_score += 1
+      Ball.reset
+    end
+  end
+
+  def self.update
+    unless pause
+      update_collision
+      Ball.update
+      @@paddle1.update
+      @@paddle2.update
+    end
+
+    @@pause = !@@pause if Raylib.key_pressed?(Raylib::KeyboardKey::Space)
+  end
+
+  def self.draw
+    Raylib.begin_drawing
+    Raylib.clear_background Raylib::WHITE
+
+    # TODO: FIX SCORE TEXT TO RELATIVE NOT ABSOLUTE
+    Raylib.draw_text(@@player1_score.to_s, 20, 20, 40, Raylib::BLACK)
+    Raylib.draw_text(@@player2_score.to_s, Raylib.get_screen_width - 40, 20, 40, Raylib::BLACK)
+
+    Ball.draw
+
+    @@paddle1.draw
+    @@paddle2.draw
+
+    Raylib.draw_text("PAUSED", Raylib.get_screen_width/2 - 160, Raylib.get_screen_height/2 - 60, 80, Raylib::BLACK) if pause
+    Raylib.end_drawing
+  end
+
+  def self.run
+    player1_score = 0
+    player2_score = 0
+
+    Raylib.init_window(800, 500, "Pong")
+
+    until Raylib.close_window?
+      update
+      draw
+    end
+
+    Raylib.close_window
   end
 end
 
-class Ball
-  @@move_direction_x : Float32
-  @@move_direction_x = Random.rand(1) == 0 ? -1.to_f32 : 1.to_f32
-  property can_move : Bool
-  property ball
-  property move_speed_y : Float32
-  getter ball_speed : Float32
-
-  def initialize(@ball_speed)
-    @can_move = false
-    @move_speed_y = 0
-    @ball = Raylib::Rectangle.new
-    @ball.width, @ball.height = 20, 20
-    @ball.x = Raylib.get_screen_width/2 - @ball.width/2
-    @ball.y = Raylib.get_screen_height/2 - @ball.height/2
-  end
-
-  def move
-    if @can_move
-      @ball.x = @ball.x + @ball_speed*@@move_direction_x
-      @move_speed_y *= @ball.y <= 0 || @ball.y >= Raylib.get_screen_height - @ball.height ? -1 : 1
-      @ball.y = @ball.y + @ball_speed*@move_speed_y/60
-    end
-  end
-
-  def reverse_x
-    @@move_direction_x *= -1
-  end
-
-  def reset
-    initialize(@ball_speed)
-  end
-end
-
-ball = Ball.new ball_speed
-ball.can_move = true
-paddle1 = Paddle.new paddle1_speed, 1
-paddle2 = Paddle.new paddle2_speed, 2
-
-pause = false
-
-until Raylib.close_window?
-  Raylib.begin_drawing
-  Raylib.clear_background Raylib::WHITE
-  Raylib.draw_text(paddle2.score.to_s, 20, 20, 40, Raylib::BLACK)
-  Raylib.draw_text(paddle1.score.to_s, Raylib.get_screen_width - 40, 20, 40, Raylib::BLACK)
-
-  Raylib.draw_rectangle_rec(ball.ball, Raylib::GREEN)
-
-  if ball.ball.x <= 0
-    paddle1.score += 1
-    ball.reset
-    spawn do
-      sleep 2.seconds
-      ball.can_move = true
-    end
-  elsif ball.ball.x >= Raylib.get_screen_width
-    paddle2.score += 1
-    ball.reset
-    spawn do
-      sleep 2.seconds
-      ball.can_move = true
-    end
-  end
-  Fiber.yield
-
-  if Raylib.check_collision_recs?(ball.ball, paddle1.paddle)
-    ball.reverse_x
-    ball.move_speed_y = ball.ball.y - paddle1.paddle.y - 30
-  elsif Raylib.check_collision_recs?(ball.ball, paddle2.paddle)
-    ball.reverse_x
-    ball.move_speed_y = ball.ball.y - paddle2.paddle.y - 30
-  end
-
-  Raylib.draw_rectangle_rec(paddle1.paddle, Raylib::GREEN)
-  Raylib.draw_rectangle_rec(paddle2.paddle, Raylib::GREEN)
-
-  unless pause
-    ball.move
-    paddle1.move(-1) if Raylib.key_down?(Raylib::KeyboardKey::W)
-    paddle1.move(1) if Raylib.key_down?(Raylib::KeyboardKey::S)
-    paddle2.move(-1) if Raylib.key_down?(Raylib::KeyboardKey::Up)
-    paddle2.move(1) if Raylib.key_down?(Raylib::KeyboardKey::Down)
-  end
-
-  pause = !pause if Raylib.key_pressed?(Raylib::KeyboardKey::Space)
-  Raylib.draw_text("PAUSED", Raylib.get_screen_width/2 - 160, Raylib.get_screen_height/2 - 60, 80, Raylib::BLACK) if pause
-  Raylib.end_drawing
-end
-
-Raylib.close_window
+RaylibPong.run
