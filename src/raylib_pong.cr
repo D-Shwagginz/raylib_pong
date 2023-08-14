@@ -1,5 +1,7 @@
 require "raylib-cr"
 
+#TODO: pause menu resume reset exit
+
 # A game involving two paddles and one ball where the goal is to get the ball 
 # past the opponents paddle. 
 module RaylibPong
