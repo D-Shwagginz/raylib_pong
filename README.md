@@ -1,18 +1,13 @@
 # raylib_pong
 
-TODO: Write a description here
+A game where you try to get the ball past the opponents paddle
 
 ## Installation
 
-TODO: Write installation instructions here
-
-## Usage
-
-TODO: Write usage instructions here
-
-## Development
-
-TODO: Write development instructions here
+1. Install raylib from [github](https://github.com/raysan5/raylib/releases)
+2. Run `make install` in raylib
+3. Download the [code](https://github.com/D-Shwagginz/raylib_pong/archive/refs/heads/main.zip)
+4. Run 'shards run' from the install directory
 
 ## Contributing
 
@@ -24,4 +19,4 @@ TODO: Write development instructions here
 
 ## Contributors
 
-- [your-name-here](https://github.com/your-github-user) - creator and maintainer
+- D. Shwagginz (https://github.com/D-Shwagginz) - creator and maintainer
