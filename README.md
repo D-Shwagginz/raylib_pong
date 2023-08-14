@@ -19,4 +19,5 @@ A game where you try to get the ball past the opponents paddle
 
 ## Contributors
 
-- D. Shwagginz (https://github.com/D-Shwagginz) - creator and maintainer
+- D. Shwagginz (https://github.com/D-Shwagginz) - creator
+- Sol-vin (https://github.com/sol-vin) - co-creator
