@@ -1,11 +1,171 @@
 require "raylib-cr"
 
-#TODO: pause menu resume reset exit
+# TODO: Pause menu resume reset exit
+# TODO: Create virtual camera
 
-# A game involving two paddles and one ball where the goal is to get the ball 
-# past the opponents paddle. 
+# A game involving two paddles and one ball where the goal is to get the ball
+# past the opponents paddle.
 module RaylibPong
-  VERSION = "0.1alpha"
+  VERSION = "0.2alpha"
+  # Screen Resolution
+  RESX = 800
+  RESY = 450
+  # Virtual Screen Resolution
+  VRESX = 160
+  VRESY = 90
+
+  # Initializes the cameras
+  macro camera_init
+    virtual_width_ratio = RESX.to_f/VRESX.to_f
+    virtual_height_ratio = RESY.to_f/VRESY.to_f
+
+    world_space_camera = Raylib::Camera2D.new
+    world_space_camera.zoom = 1.0_f32
+
+    screen_space_camera = Raylib::Camera2D.new
+    screen_space_camera.zoom = 1.0_f32
+
+    target = Raylib.load_render_texture(VRESX, VRESY)
+
+    source_rec = Raylib::Rectangle.new x: 0.0_f32, y: 0.0_f32, width: target.texture.width.to_f, height: -target.texture.height.to_f
+    dest_rec = Raylib::Rectangle.new x: -virtual_width_ratio, y: -virtual_height_ratio, width: Raylib.get_screen_width + (virtual_width_ratio*2), height: Raylib.get_screen_height + (virtual_height_ratio*2)
+
+    origin = Raylib::Vector2.new(x: 0.0_f32, y: 0.0_f32)
+    rotation = 0.0_f32
+    camera_x = 0.0_f32
+    camera_y = 0.0_f32
+  end
+
+  # Starts the world space camera
+  macro camera_world_start
+    Raylib.begin_texture_mode(target)
+    Raylib.clear_background(Raylib::RAYWHITE)
+    Raylib.begin_mode_2d(world_space_camera)
+  end
+
+  # Ends the world space camera
+  macro camera_world_end
+    Raylib.end_mode_2d
+    Raylib.end_texture_mode
+  end
+
+  # Runs the screen space camera
+  macro camera_screen
+    Raylib.begin_drawing
+    Raylib.clear_background(Raylib::RED)
+    Raylib.begin_mode_2d(screen_space_camera)
+    Raylib.draw_texture_pro(target.texture, source_rec, dest_rec, origin, 0.0_f32, Raylib::WHITE)
+    Raylib.end_mode_2d
+    Raylib.end_drawing
+  end
+
+  # A ui button that can be clicked with the mouse
+  class Button
+    # Describes the current state of the button
+    enum State
+      Pressed
+      Hovered
+      Released
+    end
+    # Describes how the button is centered horizontally
+    enum CenteringX
+      Left
+      Center
+      Right
+    end
+    # Describes how the button is centered vertically
+    enum CenteringY
+      Top
+      Middle
+      Bottom
+    end
+
+    # The relative width of the button
+    WIDTH = 0.1
+    # The relative height of the button
+    HEIGHT = 0.1
+
+    # Color of the button when pressed
+    PRESSED_COLOR = Raylib::Color.new r: 255, g: 255, b: 255, a: 255
+    # Color of the button when hovered
+    HOVERED_COLOR = Raylib::Color.new r: 255, g: 255, b: 255, a: 255
+    # Color of the button when released
+    RELEASED_COLOR = Raylib::Color.new r: 0, g: 0, b: 0, a: 255
+
+    # The relative location of the button
+    property position = Raylib::Vector2.new
+    # The current state of the button
+    property state : State = State::Released
+
+    # The absolute x of the button
+    getter abs_x : Float64
+    # The absolute y of the button
+    getter abs_y : Float64
+    # The relative x of the button
+    getter rel_x : Float64
+    # The relative y of the button
+    getter rel_y : Float64
+    # The margin from the button to the edge of the screen
+    getter margin : Float64
+    # How the button is centered horizontally relative to the position
+    getter centering_x : CenteringX
+    # How the button is centered vertically relative to the position
+    getter centering_y : CenteringY
+
+    def initialize(@abs_x = 0, @abs_y = 0, @rel_x = 0, @rel_y = 0, @margin = 0.1, @centering_x = CenteringX::Left, @centering_y = CenteringY::Top)
+      # Sets abs_x and rel_x based off of the centeringX
+      case @centering_x
+      when CenteringX::Center
+        @abs_x -= WIDTH*RESX/2
+        @rel_x -= WIDTH/2
+      when CenteringX::Right
+        @abs_x -= WIDTH*RESX
+        @rel_x -= WIDTH
+      end
+
+      # Sets abs_y and rel_y based off of the centeringY
+      case @centering_y
+      when CenteringY::Top
+        @abs_y += HEIGHT*RESY
+        @rel_y += HEIGHT
+      when CenteringY::Middle
+        @abs_y += HEIGHT*RESY/2
+        @rel_y += HEIGHT/2
+      end
+
+      @position.x = @abs_x/RESX + rel_x + @margin
+      @position.y = @abs_y/RESY + rel_y + @margin
+    end
+
+    # The relative bounding box of the button
+    def bounds
+      Raylib::Rectangle.new(
+        x: @position.x,
+        y: @position.y,
+        width: WIDTH,
+        height: HEIGHT
+      )
+    end
+
+    # The absolute bounding box of the button on the screen
+    def abs_bounds
+      Raylib::Rectangle.new(
+        x: @position.x * Raylib.get_screen_width,
+        y: @position.y * Raylib.get_screen_height,
+        width: WIDTH * Raylib.get_screen_width,
+        height: HEIGHT * Raylib.get_screen_height
+      )
+    end
+
+    # Update the button
+    def update
+    end
+
+    # Draws the button on the screen
+    def draw
+      Raylib.draw_rectangle_rec(abs_bounds, RELEASED_COLOR)
+    end
+  end
 
   # A player controlled paddle.
   class Paddle
@@ -22,13 +182,13 @@ module RaylibPong
     end
 
     # How fast the paddle can move
-    SPEED  = 0.75
+    SPEED = 0.75
     # The relative width of the paddle
-    WIDTH  = 0.01
+    WIDTH = 0.01
     # The relative height of the paddle
-    HEIGHT =  0.1
+    HEIGHT = 0.1
     # How relative width the paddle should be from the edge of the screen
-    MARGIN =  0.1
+    MARGIN = 0.1
 
     # The relative location of the paddle.
     property position = Raylib::Vector2.new
@@ -99,13 +259,13 @@ module RaylibPong
   # Holds information at a class level for the ball.
   module Ball
     # The relative radius of the ball.
-    RADIUS                     = 0.005
+    RADIUS = 0.005
 
     # The relative speed of the ball.
-    SPEED                      =   0.2
+    SPEED = 0.2
 
     # How much more should the speed coefficient increase when the ball his hit by a paddle.
-    SPEED_COEFFICIENT_INCREASE =   0.1
+    SPEED_COEFFICIENT_INCREASE = 0.1
 
     # Where the relative location of the ball.
     class_property position : Raylib::Vector2 = Raylib::Vector2.new(x: 0.5, y: 0.5)
@@ -159,7 +319,7 @@ module RaylibPong
 
     # Update the ball.
     def self.update
-      @@position = @@position + (@@velocity * Raylib.get_frame_time) 
+      @@position = @@position + (@@velocity * Raylib.get_frame_time)
       wall_hit_check
 
       if Ball.position.x < 0
@@ -192,10 +352,14 @@ module RaylibPong
   # Player 2's score.
   class_getter player2_score = 0
 
+  # Pause menu buttons
+  # Unpause button
+  class_getter unpause_button = Button.new(rel_x: 0.5, abs_y: 50, margin: 0.0, centering_x: Button::CenteringX::Center)
+
   # Sets up the player score procs in ball.
   def self.setup
-    Ball.on_player1_score = -> {@@player1_score += 1}
-    Ball.on_player2_score = -> {@@player2_score += 1}
+    Ball.on_player1_score = ->{ @@player1_score += 1 }
+    Ball.on_player2_score = ->{ @@player2_score += 1 }
   end
 
   # Has the ball been hit by a paddle?
@@ -224,6 +388,7 @@ module RaylibPong
       Ball.update
       @@paddle1.update
       @@paddle2.update
+      @@unpause_button.update
     end
 
     @@pause = !@@pause if Raylib.key_pressed?(Raylib::KeyboardKey::Space)
@@ -231,9 +396,6 @@ module RaylibPong
 
   # Draws the game.
   def self.draw
-    Raylib.begin_drawing
-    Raylib.clear_background Raylib::WHITE
-
     # TODO: FIX SCORE TEXT TO RELATIVE NOT ABSOLUTE
     Raylib.draw_text(@@player1_score.to_s, 20, 20, 40, Raylib::BLACK)
     Raylib.draw_text(@@player2_score.to_s, Raylib.get_screen_width - 40, 20, 40, Raylib::BLACK)
@@ -243,22 +405,29 @@ module RaylibPong
     @@paddle1.draw
     @@paddle2.draw
 
+    @@unpause_button.draw
+
     Raylib.draw_text("PAUSED", Raylib.get_screen_width/2 - 160, Raylib.get_screen_height/2 - 60, 80, Raylib::BLACK) if pause
-    Raylib.end_drawing
   end
 
   # Runs the game.
   def self.run
     setup
 
-    Raylib.init_window(800, 500, "Pong")
+    Raylib.init_window(RESX, RESY, "Pong")
     Raylib.set_window_state(Raylib::ConfigFlags::WindowResizable)
+    target : Raylib::RenderTexture2D
+    camera_init
 
     until Raylib.close_window?
+      camera_init if Raylib.window_resized?
       update
+      camera_world_start
       draw
+      camera_world_end
+      camera_screen
     end
-
+    Raylib.unload_render_texture(target)
     Raylib.close_window
   end
 end
