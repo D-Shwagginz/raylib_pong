@@ -12,10 +12,10 @@ module RaylibPong
   RESY = 450
   # Virtual Screen Resolution
   VRESX = 160
-  VRESY = 90
+  VRESY =  90
 
   # Initializes the cameras
-  macro camera_init
+  def self.camera_init
     virtual_width_ratio = RESX.to_f/VRESX.to_f
     virtual_height_ratio = RESY.to_f/VRESY.to_f
 
@@ -27,8 +27,8 @@ module RaylibPong
 
     target = Raylib.load_render_texture(VRESX, VRESY)
 
-    source_rec = Raylib::Rectangle.new x: 0.0_f32, y: 0.0_f32, width: target.texture.width.to_f, height: -target.texture.height.to_f
-    dest_rec = Raylib::Rectangle.new x: -virtual_width_ratio, y: -virtual_height_ratio, width: Raylib.get_screen_width + (virtual_width_ratio*2), height: Raylib.get_screen_height + (virtual_height_ratio*2)
+    source_rec = Raylib::Rectangle.new x: 0.0_f32, y: 0.0_f32, width: target.texture.width.to_f*virtual_width_ratio/5, height: -target.texture.height.to_f*virtual_height_ratio/5
+    dest_rec = Raylib::Rectangle.new x: 0, y: 0, width: Raylib.get_screen_width, height: Raylib.get_screen_height
 
     origin = Raylib::Vector2.new(x: 0.0_f32, y: 0.0_f32)
     rotation = 0.0_f32
@@ -37,20 +37,20 @@ module RaylibPong
   end
 
   # Starts the world space camera
-  macro camera_world_start
+  def self.camera_world_start
     Raylib.begin_texture_mode(target)
     Raylib.clear_background(Raylib::RAYWHITE)
     Raylib.begin_mode_2d(world_space_camera)
   end
 
   # Ends the world space camera
-  macro camera_world_end
+  def self.camera_world_end
     Raylib.end_mode_2d
     Raylib.end_texture_mode
   end
 
   # Runs the screen space camera
-  macro camera_screen
+  def self.camera_screen
     Raylib.begin_drawing
     Raylib.clear_background(Raylib::RED)
     Raylib.begin_mode_2d(screen_space_camera)
@@ -66,6 +66,7 @@ module RaylibPong
       Pressed
       Hovered
       Released
+      None
     end
     # Describes how the button is centered horizontally
     enum CenteringX
@@ -81,21 +82,21 @@ module RaylibPong
     end
 
     # The relative width of the button
-    WIDTH = 0.1
+    WIDTH = 0.2
     # The relative height of the button
     HEIGHT = 0.1
 
     # Color of the button when pressed
-    PRESSED_COLOR = Raylib::Color.new r: 255, g: 255, b: 255, a: 255
+    PRESSED_COLOR = Raylib::Color.new r: 200, g: 200, b: 200, a: 200
     # Color of the button when hovered
-    HOVERED_COLOR = Raylib::Color.new r: 255, g: 255, b: 255, a: 255
+    HOVERED_COLOR = Raylib::Color.new r: 190, g: 190, b: 190, a: 200
     # Color of the button when released
-    RELEASED_COLOR = Raylib::Color.new r: 0, g: 0, b: 0, a: 255
+    RELEASED_COLOR = Raylib::Color.new r: 210, g: 210, b: 210, a: 200
 
     # The relative location of the button
     property position = Raylib::Vector2.new
     # The current state of the button
-    property state : State = State::Released
+    property state : State = State::None
 
     # The absolute x of the button
     getter abs_x : Float64
@@ -111,8 +112,15 @@ module RaylibPong
     getter centering_x : CenteringX
     # How the button is centered vertically relative to the position
     getter centering_y : CenteringY
+    # The text the button displays
+    getter text : String
 
-    def initialize(@abs_x = 0, @abs_y = 0, @rel_x = 0, @rel_y = 0, @margin = 0.1, @centering_x = CenteringX::Left, @centering_y = CenteringY::Top)
+    # Events for button down, hover, and up
+    property on_button_down : Proc(Nil) = ->{}
+    property on_button_hover : Proc(Nil) = ->{}
+    property on_button_up : Proc(Nil) = ->{}
+
+    def initialize(@abs_x = 0, @abs_y = 0, @rel_x = 0, @rel_y = 0, @margin = 0.1, @centering_x = CenteringX::Left, @centering_y = CenteringY::Top, @text = "Text", @on_button_down = ->{}, @on_button_hover = ->{}, @on_button_up = ->{})
       # Sets abs_x and rel_x based off of the centeringX
       case @centering_x
       when CenteringX::Center
@@ -137,6 +145,43 @@ module RaylibPong
       @position.y = @abs_y/RESY + rel_y + @margin
     end
 
+    # Checks if the button is pressed
+    def down_check
+      if Raylib.mouse_button_down?(Raylib::MouseButton::Left) &&
+         (Raylib.get_mouse_x >= @position.x*Raylib.get_screen_width) &&
+         (Raylib.get_mouse_x <= (@position.x + WIDTH)*Raylib.get_screen_width) &&
+         (Raylib.get_mouse_y >= @position.y*Raylib.get_screen_height) &&
+         (Raylib.get_mouse_y <= (@position.y + HEIGHT)*Raylib.get_screen_height) &&
+         (@state != State::Pressed)
+        @state = State::Pressed
+        on_button_down.call
+      end
+    end
+
+    # Checks if the button is released
+    def up_check
+      if Raylib.mouse_button_up?(Raylib::MouseButton::Left) &&
+         @state == State::Pressed
+        @state = State::Released
+        on_button_up.call
+      end
+    end
+
+    # Checks if the button is hovered
+    def hover_check
+      if Raylib.get_mouse_x >= @position.x*Raylib.get_screen_width &&
+         (Raylib.get_mouse_x <= (@position.x + WIDTH)*Raylib.get_screen_width) &&
+         (Raylib.get_mouse_y >= @position.y*Raylib.get_screen_height) &&
+         (Raylib.get_mouse_y <= (@position.y + HEIGHT)*Raylib.get_screen_height)
+        if @state != State::Hovered && @state != State::Pressed
+          @state = State::Hovered
+          on_button_hover.call
+        end
+      elsif @state != State::Pressed && @state != State::None
+        @state = State::None
+      end
+    end
+
     # The relative bounding box of the button
     def bounds
       Raylib::Rectangle.new(
@@ -157,13 +202,34 @@ module RaylibPong
       )
     end
 
+    # The text to display on the button
+    def text_image
+      textimg = Raylib.image_text(@text, 40, Raylib::RED)
+      texttex = Raylib.load_texture_from_image(textimg)
+      texttex.width = WIDTH * Raylib.get_screen_width - 20
+      texttex.height = HEIGHT * Raylib.get_screen_height - 20
+      texttex
+    end
+
     # Update the button
     def update
+      down_check
+      up_check
+      hover_check
     end
 
     # Draws the button on the screen
     def draw
-      Raylib.draw_rectangle_rec(abs_bounds, RELEASED_COLOR)
+      rec_color = case state
+                  when State::Pressed
+                    PRESSED_COLOR
+                  when State::Hovered
+                    HOVERED_COLOR
+                  else
+                    RELEASED_COLOR
+                  end
+      Raylib.draw_rectangle_rec(abs_bounds, rec_color)
+      Raylib.draw_texture(text_image, @position.x*Raylib.get_screen_width + 10, @position.y*Raylib.get_screen_height + 10, Raylib::RED)
     end
   end
 
@@ -262,7 +328,7 @@ module RaylibPong
     RADIUS = 0.005
 
     # The relative speed of the ball.
-    SPEED = 0.2
+    SPEED = 0.4 * (Random.rand(2) == 0 ? -1 : 1)
 
     # How much more should the speed coefficient increase when the ball his hit by a paddle.
     SPEED_COEFFICIENT_INCREASE = 0.1
@@ -296,9 +362,13 @@ module RaylibPong
     end
 
     # Reset the ball back to the center.
-    def self.reset
+    def self.reset(rand_x = 0)
       @@position = Raylib::Vector2.new(x: 0.5, y: 0.5)
       @@speed_coefficient = 1.0
+      @@velocity.y = 0
+      if rand_x == 1
+        @@velocity.x *= (Random.rand(2) == 0 ? -1 : 1)
+      end
     end
 
     # Check if the ball has hit a wall, if so reverse it.
@@ -336,7 +406,14 @@ module RaylibPong
     # Draw the ball.
     def self.draw
       abs_position = @@position * Raylib::Vector2.new(x: Raylib.get_screen_width, y: Raylib.get_screen_height)
-      Raylib.draw_circle(abs_position.x, abs_position.y, Ball::RADIUS * Raylib.get_screen_width, Raylib::GREEN)
+      #Raylib.draw_circle(abs_position.x, abs_position.y, Ball::RADIUS * Raylib.get_screen_width, Raylib::GREEN)
+
+      # The height of the ball rec
+      height = Ball::RADIUS * Raylib.get_screen_height
+      # The width of the ball rec
+      width = Ball::RADIUS * Raylib.get_screen_width
+
+      Raylib.draw_rectangle(abs_position.x - width, abs_position.y - height, width*2, height*3, Raylib::BLACK)
     end
   end
 
@@ -354,7 +431,18 @@ module RaylibPong
 
   # Pause menu buttons
   # Unpause button
-  class_getter unpause_button = Button.new(rel_x: 0.5, abs_y: 50, margin: 0.0, centering_x: Button::CenteringX::Center)
+  class_getter button_unpause = Button.new(rel_x: 0.5, abs_y: 80, margin: 0.0, centering_x: Button::CenteringX::Center, text: "Unpause", on_button_up: ->{ @@pause = !@@pause })
+  # Reset button
+  class_getter button_reset = Button.new(rel_x: 0.5, abs_y: 140, margin: 0.0, centering_x: Button::CenteringX::Center, text: "Reset", on_button_up: ->{ restart })
+  # Exit button
+  class_getter button_exit = Button.new(rel_x: 0.5, abs_y: 200, margin: 0.0, centering_x: Button::CenteringX::Center, text: "Exit", on_button_up: ->{ Raylib.close_window })
+
+  def self.restart
+    @@pause = false
+    Ball.reset(rand_x: 1)
+    paddle1.initialize
+    paddle2.initialize
+  end
 
   # Sets up the player score procs in ball.
   def self.setup
@@ -388,26 +476,34 @@ module RaylibPong
       Ball.update
       @@paddle1.update
       @@paddle2.update
-      @@unpause_button.update
     end
+    @@button_unpause.update if @@pause == true
+    @@button_reset.update if @@pause == true
+    @@button_exit.update if @@pause == true
 
     @@pause = !@@pause if Raylib.key_pressed?(Raylib::KeyboardKey::Space)
   end
 
   # Draws the game.
   def self.draw
-    # TODO: FIX SCORE TEXT TO RELATIVE NOT ABSOLUTE
-    Raylib.draw_text(@@player1_score.to_s, 20, 20, 40, Raylib::BLACK)
-    Raylib.draw_text(@@player2_score.to_s, Raylib.get_screen_width - 40, 20, 40, Raylib::BLACK)
+    Raylib.begin_drawing
+    Raylib.clear_background(Raylib::WHITE)
+
+    Raylib.draw_text(@@player1_score.to_s, 0.02*Raylib.get_screen_width, 0.02*Raylib.get_screen_height, Raylib.get_screen_height/10, Raylib::BLACK)
+    Raylib.draw_text(@@player2_score.to_s, 0.98*Raylib.get_screen_width - Raylib.get_screen_height/20, 0.02*Raylib.get_screen_height, Raylib.get_screen_height/10, Raylib::BLACK)
 
     Ball.draw
 
     @@paddle1.draw
     @@paddle2.draw
 
-    @@unpause_button.draw
+    Raylib.draw_text("PAUSED", Raylib.get_screen_width/2 - 160, 40, 80, Raylib::BLACK) if pause
 
-    Raylib.draw_text("PAUSED", Raylib.get_screen_width/2 - 160, Raylib.get_screen_height/2 - 60, 80, Raylib::BLACK) if pause
+    @@button_unpause.draw if @@pause == true
+    @@button_reset.draw if @@pause == true
+    @@button_exit.draw if @@pause == true
+
+    Raylib.end_drawing
   end
 
   # Runs the game.
@@ -416,18 +512,18 @@ module RaylibPong
 
     Raylib.init_window(RESX, RESY, "Pong")
     Raylib.set_window_state(Raylib::ConfigFlags::WindowResizable)
-    target : Raylib::RenderTexture2D
-    camera_init
+    # target : Raylib::RenderTexture2D
+    # camera_init
 
     until Raylib.close_window?
-      camera_init if Raylib.window_resized?
+      # camera_init if Raylib.window_resized?
       update
-      camera_world_start
+      # camera_world_start
       draw
-      camera_world_end
-      camera_screen
+      # camera_world_end
+      # camera_screen
     end
-    Raylib.unload_render_texture(target)
+    # Raylib.unload_render_texture(target)
     Raylib.close_window
   end
 end
